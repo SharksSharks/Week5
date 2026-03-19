@@ -109,3 +109,181 @@ library(flowWorkspace)
 
 cytoframe <- load_cytoframe_from_fcs(fcs_files[1], truncate_max_range=FALSE)
 cytoframe
+
+#cytoset also has a flowSet equivilant: 
+cytoset <- load_cytoset_from_fcs(fcs_files, truncate_max_range = FALSE, transformation = FALSE)
+
+cytoset
+
+#you'll see less information when you run str(), since things aren't loaded in yet (see slides for more info)
+
+#size comparison
+
+obj_size(flowFrame)
+obj_size(cytoframe)
+
+#interconverting - some packages don't recognize cytoframe/set objects. So you can convert
+
+ConvertedToCytoframe <- flowFrame_to_cytoframe(flowFrame)
+ConvertedToCytoframe
+
+ConvertedToFlowframe <- flowWorkspace::cytoframe_to_flowFrame(cytoframe)
+ConvertedToFlowframe
+
+ConvertedToCytoset <- flowSet_to_cytoset(flowSet)
+ConvertedToCytoset
+
+ConvertedToFlowset <- cytoset_to_flowSet(flowSet)
+ConvertedToFlowset
+
+#regardless of what you use, the next step is using gating (with GatingSet) -also gatingsets are s4 objects too
+
+GatingSet1 <- GatingSet(flowSet)
+GatingSet1 
+
+GatingSet2 <- GatingSet(cytoset)
+GatingSet2
+
+#we're building gating sets over the next three weeks. For now we're bringing in dataset with gates
+#you can bring in data from Flowjo, diva, and cytobank workspaces:
+
+# BiocManager::install("CytoML") #Bioconductor
+library(CytoML)
+
+#The .wsp files within this week’s data where created via Floreada.io. 
+# The main difference between the two files is one is a copy of the original that was opened within FlowJo, 
+# and subsequently swtiched from logicle to bi-exponential transformation.
+
+#you need to set up a file path. You can do this by looking first using list.files to find flowjo workspaces:
+
+FlowJoWsp <- list.files(path = Folder, pattern = ".wsp", full = TRUE)
+FlowJoWsp
+
+#and now we're using str_detect to look for files that are "Opened" - whatever that means in flowjo
+
+ThisWorkspace <- FlowJoWsp[stringr::str_detect(FlowJoWsp, "Opened")]
+ThisWorkspace
+
+#found one. Now you can  set up the intermediate object using open_flowjo_xml()
+ws <- open_flowjo_xml(ThisWorkspace)
+ws
+
+#now you have the intermeidate object, which you can then make into a gating object using flowjo_to_gatingset():
+
+#PAUSE. He fucked it up:
+
+#However, due to how I named the original .fcs files 
+# (“GROUPNAME” being individual specimens, “TUBENAME” being either Ctrl or SEB), 
+# and downsampled to the same number of cells, we will encounter the following error
+
+#gs <- flowjo_to_gatingset(ws=ws, name=1, path = Folder)
+#gs
+#! object 'gs' not found
+
+#he looked at help: ?flowjo_to_gatingset
+
+#And he fixed it using additional.keys:
+
+gs <- flowjo_to_gatingset(ws=ws, name=1, path = Folder, additional.keys="GROUPNAME")
+gs
+
+class(gs)
+
+#uuuuggghhhh he will never talk about gating will he. Here is how you FIND OUT HOW LONG A COMMAND TAKES TO RUN
+
+system.time({
+
+flowjo_to_gatingset(ws=ws, name=1, path = Folder, additional.keys="GROUPNAME")
+
+})
+
+#AND HERE'S ANOTHER PACKAGE TO DO THAT:
+
+# install.packages("bench") # CRAN
+library(bench)
+
+mark(
+  Test <- flowjo_to_gatingset(ws=ws, name=1, path = Folder, additional.keys="GROUPNAME"),
+  iterations= 5
+  )
+
+#FINALLY, SOME GATES
+
+#going back to the gs object, you can create a gate logic flowchart/"plot"
+
+plot(gs) #oh, gs = gating strategy?
+
+#or spit it out in text:
+gs_get_pop_paths(gs)
+
+#to get cell counts in gates:
+
+Data <- gs_pop_get_count_fast(gs)
+head(Data, 5)
+
+#maybe you want to subset them based on metadata. To get that metadata:
+
+pData(gs)
+
+#here's using that to create an alternate gating strategy - this is not explained, will be covered in the future:
+
+AlternateGS <- flowjo_to_gatingset(ws=ws, name=1, path = Folder,
+ additional.keys="GROUPNAME",
+ keywords=c("$DATE", "$CYT", "GROUPNAME"))
+pData(AlternateGS)
+
+#to visualize all this we can use ggcyto
+# note though - ggplot2 recently had a major version change, with significant internal changes occuring. 
+# As a consequence of these changes, ggcyto functions that relied on the old ggplot2 functions broke and had 
+# to be updated.
+
+#Any updates to CRAN packages are reflected immediately. By contrast, Bioconductor is on a twice yearly 
+# release cycle, so to take advantage of the ggcyto “fixes” that allow it to interact with the new version of 
+# ggplot2, we will need to make sure we have the “developmental” version installed.
+
+#so need to check versions:
+packageVersion("ggplot2")
+packageVersion("ggcyto")
+
+#mine are too old. So removing them:
+
+#remove.packages("ggplot2")
+#remove.packages("ggcyto")
+
+#Then close/reopen positron
+
+#installing ggplot version:
+#install.packages("ggplot2")
+
+#installing the dev version of ggcyto:
+#remotes::install_github("RGLab/ggcyto")
+
+#and loading
+library(ggplot2)
+library(ggcyto)
+
+#The function responsible for plotting is the ggcyto() function. 
+# The first argument (“gs[1]”) is designating which .fcs file in our GatingSet we are trying to visualize.
+
+#The second argument (“subset”) corresponds to which gating node we want to visualize.
+#  In this case, when set to “root”, we are seeing all cells present in the .fcs file. If we however wanted to
+#  visualize the cells within the CD4+ gate, we would swap the value provided to this argument.
+
+#The next argument “aes” stands for aesthetics (more on this next week).
+#  You will notice it has its own set of parenthesis, in which we designate the markers/fluorophores
+#  we want to visualize on the x and y axis.
+
+#The final argument (“+ geom_hex(bins=100)”) specifies we want to generate a flow cytometry style plot,
+#  with it’s bin arguments value setting the resolution.
+
+ggcyto(gs[1], subset="CD4+", aes(x="FSC-A", y="SSC-A")) + geom_hex(bins=100) 
+
+#alternative visualization (IFNg and TFNa)
+ggcyto(gs[1], subset="CD8+", aes(x="IFNg", y="TNFa")) + geom_hex(bins=100) 
+
+#you can also specifiy the flourophore instead of marker:
+ggcyto(gs[1], subset="CD8+", aes(x="BV750-A", y="PE-Dazzle594-A")) + geom_hex(bins=100) 
+
+#and tcell subset
+ggcyto(gs[6], subset="Tcells", aes(x="CD4", y="CD8")) + geom_hex(bins=100)
+
