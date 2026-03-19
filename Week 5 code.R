@@ -41,4 +41,71 @@ class(flowSet)
 
 #it's a flowset object, which is part of the flowcore package
 #this is a bioconductor S4-type object that within its frame slot contains "flowFrames" 
-#(you can see this by expanding the "flowset/frames" menus in the variables sidebar)As
+#(you can see this by expanding the "flowset/frames" menus in the variables sidebar)
+#essentially, the flowset is a container of more containers
+
+str(flowSet) # this will also get you information, it's just a bunch of text in the console window. 
+#some of this text you can see represent how many folders/levels deep something is
+
+#you can also access some of the subfolders (and files inside them) using @, as from week 3
+
+#note about memory and flowFrame/Set:
+#the .fcs files are read into your RAM. You can exceed it with big enough files.
+
+#checking how much memory is being used by specific variables/objects:
+#using lobstr R package's obj_size() function (not to be confused with base R's object.size())
+
+# Base R
+object.size(flowFrame)
+
+#install.packages("lobstr") #this is from CRAN
+
+#using lobstr
+library(lobstr)
+obj_size(flowFrame)
+
+#and looking at flowset (it's bigger)
+obj_size(flowSet)
+
+#to look at total memory:
+
+mem_used()
+
+#to see what's available for the pc:
+
+#install - install.packages("ps")
+library(ps)
+ps_system_memory()
+
+Memory <- ps::ps_system_memory()
+message("Total GB ", round(Memory$total / 1024^3, 2))
+message("Free GB ", round(Memory$free / 1024^3, 2))
+
+#and to look at your system info/name and give memory info (and get complicated with conditionals)
+
+OperatingSystem <- Sys.info()[["sysname"]]
+
+if (OperatingSystem == "Windows") { # Windows
+  # install.packages("ps") # CRAN
+   Memory <- ps::ps_system_memory()
+   message("Total GB ", round(Memory$total / 1024^3, 2))
+   message("Free GB ", round(Memory$free / 1024^3, 2))
+
+  } else if (OperatingSystem == "Darwin") { # MacOS
+    system("top -l 1 | grep PhysMem")
+
+  } else if (OperatingSystem == "Linux") { # Linux
+    system("free -h")
+
+  } else {message("A wild FreeBSD-User appears")}
+
+#another R package that reduces the memory load (gets around overhead using "pointers") - flowWorkspace
+#pointers doesn't load things in until they're needed - that reduces background memory usage
+
+# BiocManager::install("flowWorkspace") #Bioconductor
+library(flowWorkspace)
+
+#similar abilities and object types to flowFrame/flowSet:
+
+cytoframe <- load_cytoframe_from_fcs(fcs_files[1], truncate_max_range=FALSE)
+cytoframe
